@@ -1,6 +1,6 @@
 # This source file is part of mc3p, the Minecraft Protocol Parsing Proxy.
 #
-# Copyright (C) 2011 Matthew J. McGill
+# Copyright (C) 2011 Matthew J. McGill, AmirAli Mollaei
 
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License v2 as published by
@@ -27,6 +27,8 @@ class MutePlugin(MC3Plugin):
         /muted          Show the list of currently muted players.
     """
     def init(self, args):
+        print("Hello from MutePlugin!")
+
         self.muted_set = set() # Set of muted player names.
 
     def send_chat(self, chat_msg):
@@ -60,5 +62,5 @@ class MutePlugin(MC3Plugin):
             return False # Drop mute plugin commands.
         else:
             # Drop messages containing the string <NAME>, where NAME is a muted player name.
-            return not any(txt.startswith('<%s>' % name) for name in self.muted_set)
+            return not any('<%s>' % name in txt for name in self.muted_set)
 

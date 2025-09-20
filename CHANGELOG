@@ -1,3 +1,6 @@
+0.4pre
+- updated codebase to modern python versions and removed python 2 compatibility
+
 0.2pre
 - support for protocol versions 17-21 (Up through 1.9pre5)
 - Windows now supported (tested with CPython 2.7)
@@ -7,4 +10,3 @@
 - support for protocol version 17 (Minecraft Beta 1.8)
 - basic plugin support
 - linux/OS X only
-

@@ -1,21 +1,20 @@
 
-## What is mc3p?
+# What is mc3p?
 
 mc3p (short for Minecraft Protocol-Parsing Proxy) is a Minecraft proxy
 server. With mc3p, you can create programs (mc3p plugins) that examine
 and modify messages sent between the Minecraft client and server without
 writing any multi-threaded or network-related code.
 
-## Installation.
+## Installation
 
-mc3p requires Python 2.7. The easiest way to install mc3p is with
-easy_install from the setuptools project. If you don't have setuptools
-installed, first follow the installation instructions on
-[this page](http://pypi.python.org/pypi/setuptools).
+mc3p requires Python 3.7 or later. The easiest way to install mc3p is with
+pip. If you don't have pip installed, follow the installation instructions on
+[this page](https://pip.pypa.io/en/stable/installation/).
 
-With setuptools installed, installing mc3p is as simple as:
+With pip installed, installing mc3p is as simple as:
 
-    $ easy_install http://mattmcgill.com/mc3p/mc3p-0.3-py2.7.egg
+    pip install .
 
 Note that, depending on your system configuration, you may have to run
 the command with root privileges.
@@ -26,42 +25,42 @@ To install from source, just clone the GitHub repository. You can then run
 mc3p directly from the top-level directory of the repository, or install
 it in 'development' mode with
 
-    python setup.py develop
+    python3 setup.py develop
 
 If mc3p is installed in 'development' mode, you can uninstall it with
 
-    python setup.py develop --uninstall
+    python3 setup.py develop --uninstall
 
-## Running mc3p.
+## Running mc3p
 
 To start an mc3p server that listens on port 80 and forwards connections
 to a Minecraft server:
 
-    $ python -m mc3p.proxy -p 80 <server>
+    python3 -m mc3p.proxy -p 80 your.server.com
 
-Within your Minecraft client, you can then connect to <server> through
+Within your Minecraft client, you can then connect to your.server.com through
 mc3p using the server address 'localhost:80'. However, to do anything useful
 you must enable some plugins.
 
-## Using mc3p plugins.
+## Using mc3p plugins
 
 An mc3p plugin has complete control over all the messages that pass between
 the Minecraft client and server. By manipulating messages sent between client
 and server, you can add useful functionality without modifying client or server
 code.
 
-To run a plugin, you must enable it with the --plugin <name> option when you start mc3p.
+To run a plugin, you must enable it with the --plugin plugin_name option when you start mc3p.
 All enabled plugins are initialized after a client successfully connects to a server.
 For example, to run the mute example plugin that comes with mc3p:
 
-    $ python -m mc3p.proxy --plugin 'mc3p.plugin.mute' <server>
+    python3 -m mc3p.proxy --plugin 'mc3p.plugin.mute' your.server.com
 
 Some plugins accept arguments that modify their behavior. To pass arguments
 to a plugin, enclose them in parentheses following the plugin's name, like so:
---plugin '<name>(<arguments>)'. Be sure to use quotes, or escape the parentheses
+--plugin 'plugin_name(plugin_arguments)'. Be sure to use quotes, or escape the parentheses
 as required by your shell.
 
-    $ python -m mc3p.proxy --plugin '<plugin>(<arguments>)' <server>
+    python3 -m mc3p.proxy --plugin 'plugin_name(plugin_arguments)' your.server.com
 
 ## A Plugin Example: mute
 
@@ -71,7 +70,7 @@ server. It requires no modification to either the Minecraft client or server.
 
 Give it a try: start mc3p with the 'mute' plugin enabled:
 
-    $ python -m mc3p.proxy --plugin 'mc3p.plugin.mute' your.favorite.server.com
+    python3 -m mc3p.proxy --plugin 'mc3p.plugin.mute' your.favorite.server.com
 
 You can now mute a player by typing '/mute NAME' in chat,
 and unmute them with '/unmute NAME'. You can display muted players with '/muted'.
@@ -100,17 +99,17 @@ Now take a look at the source code for the 'mute' plugin:
 
         def mute(self, player_name):
             self.muted_set.add(player_name)
-            self.send_chat('Muted %s' % player_name)
+            self.send_chat(f'Muted {player_name}')
 
         def unmute(self, player_name):
             if player_name in self.muted_set:
                 self.muted_set.remove(player_name)
-                self.send_chat('Unmuted %s' % player_name)
+                self.send_chat(f'Unmuted {player_name}')
             else:
-                self.send_chat('%s is not muted' % player_name)
+                self.send_chat(f'{player_name} is not muted')
 
         def muted(self):
-            self.send_chat('Currently muted: %s' % ', '.join(self.muted_set))
+            self.send_chat(f'Currently muted: {", ".join(self.muted_set)}')
 
         @msghdlr(0x03)
         def handle_chat(self, msg, source):
@@ -125,7 +124,7 @@ Now take a look at the source code for the 'mute' plugin:
                 return False # Drop mute plugin commands.
             else:
                 # Drop messages containing the string <NAME>, where NAME is a muted player name.
-                return not any(txt.startswith('<%s>' % name) for name in self.muted_set)
+                return not any(f'<{name}>' in txt for name in self.muted_set)
 
 Every mc3p plugin is a Python module that contains a single *plugin class*, a
 subclass of MC3Plugin. A plugin must contain *exactly* one plugin class;
@@ -175,4 +174,3 @@ The mute plugin uses the 'to_client' method to inject chat messages that indicat
 the result of each command issued by the user. Note that since these messages
 are sent to the client, and not the server, they are not visible to any other
 user on the server.
-

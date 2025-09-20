@@ -1,6 +1,6 @@
 # This source file is part of mc3p, the Minecraft Protocol Parsing Proxy.
 #
-# Copyright (C) 2011 Matthew J. McGill
+# Copyright (C) 2011 Matthew J. McGill, AmirAli Mollaei
 
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License v2 as published by
@@ -15,21 +15,14 @@
 # with this program; if not, write to the Free Software Foundation, Inc.,
 # 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 
-import re
-import asyncore
-import os
-import socket
+import importlib
 import logging
-import traceback
-import imp
-import inspect
 import multiprocessing
-import Queue
-import messages
+import queue
 import traceback
 
-from util import Stream, PartialPacketException
-from parsing import *
+from . import messages
+from .parsing import *
 
 ### Globals ###
 
@@ -157,12 +150,12 @@ class PluginManager(object):
             raise Exception('Unrecognized source ' + source)
         try:
             return q.get(block=False)
-        except Queue.Empty:
+        except queue.Empty:
             return None
 
     def _load_plugins(self):
         """Load or reload all plugins."""
-        logger.info('%s loading plugins' % repr(self))
+        logger.info('%s loading %s plugins' % (repr(self), len(self.__config.plugins)))
         for pname in self.__config.plugins:
             self._load_plugin(pname)
 
@@ -173,7 +166,7 @@ class PluginManager(object):
             mod = __import__(pname)
             for p in pname.split('.')[1:]:
                 mod = getattr(mod, p)
-            self.__plugins[pname] = reload(mod)
+            self.__plugins[pname] = importlib.reload(mod)
         except Exception as e:
             logger.error("Plugin %s failed to load: %s" % (pname, str(e)))
             return
@@ -196,7 +189,7 @@ class PluginManager(object):
         pmod = self.__plugins[pname]
         class_check = lambda c: \
             c != MC3Plugin and isinstance(c, type) and issubclass(c, MC3Plugin)
-        classes = filter(class_check, pmod.__dict__.values())
+        classes = list(filter(class_check, pmod.__dict__.values()))
         if len(classes) == 0:
             logger.error("Plugin '%s' does not contain " % pname + \
                          "a subclass of MC3Plugin")
@@ -288,7 +281,7 @@ class MsgHandlerWrapper(object):
         self.msgtypes = msgtypes
         self.method = method
 
-    def __call__(*args, **kargs):
+    def __call__(self, *args, **kargs):
         self.method(*args, **kargs)
 
 
@@ -309,8 +302,8 @@ class MC3Plugin(object):
         self._collect_msg_hdlrs()
 
     def _collect_msg_hdlrs(self):
-        wrappers = filter(lambda x: isinstance(x, MsgHandlerWrapper),
-                          self.__class__.__dict__.values())
+        wrappers = list(filter(lambda x: isinstance(x, MsgHandlerWrapper),
+                          self.__class__.__dict__.values()))
         for wrapper in wrappers:
             self._unwrap_hdlr(wrapper)
 

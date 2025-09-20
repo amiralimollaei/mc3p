@@ -1,6 +1,6 @@
 # This source file is part of mc3p, the Minecraft Protocol Parsing Proxy.
 #
-# Copyright (C) 2011 Matthew J. McGill
+# Copyright (C) 2011 Matthew J. McGill, AmirAli Mollaei
 
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License v2 as published by
@@ -16,24 +16,23 @@
 # 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 
 
-from sys import version_info
 from setuptools import setup, find_packages
 
 basename = "mc3p"
-version = "0.3"
-pyversion = "%s.%s" % (version_info.major, version_info.minor)
+version = "0.4"
 
 setup(
-    name = basename,
-    version = version,
-    packages = find_packages(),
-    zip_safe = False,
-    test_suite = 'test_plugins',
-    author = "Matt McGill",
-    author_email = "matt.mcgill@gmail.com",
-    description = "Pluggable Minecraft proxy",
-    keywords = "minecraft proxy",
-    url = "http://mattmcgill.com/mc3p/%s-%s-%s.egg" % (basename, version, pyversion)
+    name=basename,
+    version=version,
+    packages=find_packages(),
+    author="Matt McGill, AmirAli Mollaei",
+    author_email="matt.mcgill@gmail.com",
+    description="A pluggable proxy for the Minecraft protocol.",
+    keywords="minecraft proxy",
+    classifiers=[
+        "Programming Language :: Python :: 3",
+        "License :: OSI Approved :: GNU General Public License v2 (GPLv2)",
+        "Operating System :: OS Independent",
+    ],
+    python_requires='>=3.7',
 )
-
-

@@ -1,6 +1,6 @@
 # This source file is part of mc3p, the Minecraft Protocol Parsing Proxy.
 #
-# Copyright (C) 2011 Matthew J. McGill
+# Copyright (C) 2011 Matthew J. McGill, AmirAli Mollaei
 
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License v2 as published by
@@ -15,22 +15,25 @@
 # with this program; if not, write to the Free Software Foundation, Inc.,
 # 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 
-import logging, logging.config, os
-import asyncore, socket, sys, signal, struct, logging.config, re, os.path, inspect, imp
-import traceback, tempfile
-from time import time, sleep
+import asyncio
+import logging
+import re
+import signal
+import socket
+import sys
+import traceback
 from optparse import OptionParser
+from time import time
 
-import messages
-from plugins import PluginConfig, PluginManager
-from parsing import parse_unsigned_byte, parse_int
-from util import Stream, PartialPacketException
-import util
+from . import messages, util
+from .parsing import parse_unsigned_byte
+from .plugins import PluginConfig, PluginManager
+from .util import PartialPacketException, Stream
 
 logger = logging.getLogger("mc3p")
 
 def sigint_handler(signum, stack):
-    print "Received signal %d, shutting down" % signum
+    print("Received signal %d, shutting down" % signum)
     sys.exit(0)
 
 
@@ -118,11 +121,12 @@ class UnsupportedPacketException(Exception):
     def __init__(self,pid):
         Exception.__init__(self,"Unsupported packet id 0x%x" % pid)
 
-class MinecraftProxy(asyncore.dispatcher_with_send):
-    """Proxies a packet stream from a Minecraft client or server.
+class MinecraftProxy(asyncio.Protocol):
+    """
+    Proxies a packet stream from a Minecraft client or server.
     """
 
-    def __init__(self, src_sock, other_side=None):
+    def __init__(self, other_side=None):
         """Proxies one side of a client-server connection.
 
         MinecraftProxy instances are created in pairs that have references to
@@ -132,7 +136,7 @@ class MinecraftProxy(asyncore.dispatcher_with_send):
         and creating a server proxy with other_side=client. Finally, the
         proxy creator should do client_proxy.other_side = server_proxy.
         """
-        asyncore.dispatcher_with_send.__init__(self, src_sock)
+        self.transport = None
         self.plugin_mgr = None
         self.other_side = other_side
         if other_side == None:
@@ -147,7 +151,10 @@ class MinecraftProxy(asyncore.dispatcher_with_send):
         self.msg_queue = []
         self.out_of_sync = False
 
-    def handle_read(self):
+    def connection_made(self, transport):
+        self.transport = transport
+
+    def data_received(self, data):
         """Read all available bytes, and process as many packets as possible.
         """
         t = time()
@@ -156,13 +163,13 @@ class MinecraftProxy(asyncore.dispatcher_with_send):
             logger.debug("%s: total/wasted bytes is %d/%d (%f wasted)" % (
                  self.side, self.stream.tot_bytes, self.stream.wasted_bytes,
                  100 * float(self.stream.wasted_bytes) / self.stream.tot_bytes))
-        self.stream.append(self.recv(4092))
+        self.stream.append(data)
 
         if self.out_of_sync:
             data = self.stream.read(len(self.stream))
             self.stream.packet_finished()
             if self.other_side:
-                self.other_side.send(data)
+                self.other_side.transport.write(data)
             return
 
         try:
@@ -174,22 +181,24 @@ class MinecraftProxy(asyncore.dispatcher_with_send):
                     logger.info('Client requests protocol version %d' % proto_version)
                     if not proto_version in messages.protocol:
                         logger.error("Unsupported protocol version %d" % proto_version)
-                        self.handle_close()
+                        self.connection_lost(None)
                         return
                     self.msg_spec, self.other_side.msg_spec = messages.protocol[proto_version]
-                forward = True
+                forwarding = True
                 if self.plugin_mgr:
                     forwarding = self.plugin_mgr.filter(packet, self.side)
                     if forwarding and packet.modified:
-                        packet['raw_bytes'] = self.msg_spec[packet['msgtype']].parse(packet)
+                        packet['raw_bytes'] = self.msg_spec[packet['msgtype']].emit(packet)
                 if forwarding and self.other_side:
-                    self.other_side.send(packet['raw_bytes'])
-                # Since we know we're at a message boundary, we can inject
-                # any messages in the queue.
-                msgbytes = self.plugin_mgr.next_injected_msg_from(self.side)
-                while self.other_side and msgbytes is not None:
-                    self.other_side.send(msgbytes)
+                    self.other_side.transport.write(packet['raw_bytes'])
+                
+                if self.plugin_mgr:
+                    # Since we know we're at a message boundary, we can inject
+                    # any messages in the queue.
                     msgbytes = self.plugin_mgr.next_injected_msg_from(self.side)
+                    while self.other_side and msgbytes is not None:
+                        self.other_side.transport.write(msgbytes)
+                        msgbytes = self.plugin_mgr.next_injected_msg_from(self.side)
 
                 # Attempt to parse the next packet.
                 packet = parse_packet(self.stream,self.msg_spec, self.side)
@@ -202,14 +211,16 @@ class MinecraftProxy(asyncore.dispatcher_with_send):
             self.out_of_sync = True
             self.stream.reset()
 
-    def handle_close(self):
+    def connection_lost(self, exc):
         """Call shutdown handler."""
         logger.info("%s socket closed.", self.side)
-        self.close()
+        if self.transport:
+            self.transport.close()
         if self.other_side is not None:
             logger.info("shutting down other side")
             self.other_side.other_side = None
-            self.other_side.close()
+            if self.other_side.transport:
+                self.other_side.transport.close()
             self.other_side = None
             logger.info("shutting down plugin manager")
             self.plugin_mgr.destroy()
@@ -229,7 +240,9 @@ def parse_packet(stream, msg_spec, side):
     """Parse a single packet out of stream, and return it."""
     # read Packet ID
     msgtype = parse_unsigned_byte(stream)
+    
     if not msg_spec[msgtype]:
+        logger.debug(msg_spec)
         raise UnsupportedPacketException(msgtype)
     logger.debug("%s trying to parse message type %x" % (side, msgtype))
     msg_parser = msg_spec[msgtype]
@@ -238,8 +251,8 @@ def parse_packet(stream, msg_spec, side):
     return Message(msg)
 
 
-if __name__ == "__main__":
-    logging.basicConfig(level=logging.ERROR)
+async def main():
+    logging.basicConfig(level=logging.INFO)
     (host, port, opts, pcfg) = parse_args()
 
     if opts.logfile:
@@ -251,18 +264,54 @@ if __name__ == "__main__":
     # Install signal handler.
     signal.signal(signal.SIGINT, sigint_handler)
 
-    while True:
-        cli_sock = wait_for_client(opts.locport)
+    loop = asyncio.get_running_loop()
 
-        # Set up client/server main-in-the-middle.
-        sleep(0.05)
-        MinecraftSession(pcfg, cli_sock, host, port)
+    async def handle_client(reader, writer):
+        cli_proxy = MinecraftProxy()
+        cli_proxy.transport = writer # Not a full transport, but has write/close.
 
-        # I/O event loop.
-        if opts.perf_data:
-            logger.warn("Profiling enabled, saving data to %s" % opts.perf_data)
-            import cProfile
-            cProfile.run('asyncore.loop()', opts.perf_data)
-        else:
-            asyncore.loop()
+        print("connecting...")
+        try:
+            # Create connection to the server
+            transport, srv_proxy = await loop.create_connection(
+                lambda: MinecraftProxy(other_side=cli_proxy),
+                host, port
+            )
+        except Exception as e:
+            print(f"Failed to connect to server: {e}")
+            writer.close()
+            await writer.wait_closed()
+            return
+
+        plugin_mgr = PluginManager(pcfg, cli_proxy, srv_proxy)
+        cli_proxy.plugin_mgr = plugin_mgr
+        srv_proxy.plugin_mgr = plugin_mgr
+        print("connected!")
+
+        # Forward data from client to server
+        while not reader.at_eof():
+            data = await reader.read(4096)
+            if data:
+                cli_proxy.data_received(data)
+            else:
+                break
+        
+        cli_proxy.connection_lost(None)
+
+
+    server = await asyncio.start_server(
+        handle_client,
+        '127.0.0.1', opts.locport)
+
+    addr = server.sockets[0].getsockname()
+    print(f'Serving on {addr}')
+
+    async with server:
+        await server.serve_forever()
+
+if __name__ == "__main__":
+    try:
+        asyncio.run(main())
+    except KeyboardInterrupt:
+        pass
 

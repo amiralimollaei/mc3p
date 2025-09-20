@@ -1,6 +1,6 @@
 # This source file is part of mc3p, the Minecraft Protocol Parsing Proxy.
 #
-# Copyright (C) 2011 Matthew J. McGill
+# Copyright (C) 2011 Matthew J. McGill, AmirAli Mollaei
 
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License v2 as published by
@@ -15,7 +15,9 @@
 # with this program; if not, write to the Free Software Foundation, Inc.,
 # 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 
-import sys, struct, logging, inspect
+import logging
+import struct
+import sys
 
 logger = logging.getLogger('parsing')
 
@@ -34,15 +36,15 @@ def emit_byte(b):
     return struct.pack(">b",b)
 
 
-def with_defaults(tuple):
-    if len(tuple) == 2:
-        x,y = tuple
-        return x,y,0,sys.maxint
-    elif len(tuple) == 3:
-        x,y,z = tuple
-        return x,y,z,sys.maxint
+def with_defaults(my_tuple):
+    if len(my_tuple) == 2:
+        x, y = my_tuple
+        return x, y, 0, sys.maxsize
+    elif len(my_tuple) == 3:
+        x, y, z = my_tuple
+        return x, y, z, sys.maxsize
     else:
-        return tuple
+        return my_tuple
 
 def defmsg(msgtype, name, pairs):
     """Build a Parsem for a message out of (name,Parsem) pairs."""
@@ -52,8 +54,8 @@ def defmsg(msgtype, name, pairs):
             msg[name] = parsem.parse(stream)
         return msg
     def emit(msg):
-        return ''.join([emit_unsigned_byte(msgtype),
-                        ''.join([parsem.emit(msg[name]) for (name,parsem) in pairs])])
+        return b''.join([emit_unsigned_byte(msgtype),
+                        b''.join([parsem.emit(msg[name]) for (name,parsem) in pairs])])
     return Parsem(parse,emit,name)
 
 def defloginmsg(tuples):
@@ -77,9 +79,9 @@ def defloginmsg(tuples):
         proto_version = msg['proto_version']
         pairs = ((name,parsem) for (name,parsem,x,y) in map(with_defaults, tuples)
                                if x <= proto_version <= y)
-        return ''.join([emit_unsigned_byte(0x01),
+        return b''.join([emit_unsigned_byte(0x01),
                         emit_int(msg['proto_version']),
-                        ''.join([parsem.emit(msg[name]) for (name,parsem) in pairs])])
+                        b''.join([parsem.emit(msg[name]) for (name,parsem) in pairs])])
     return Parsem(parse, emit)
 
 MC_byte = Parsem(parse_byte,emit_byte)
@@ -135,22 +137,22 @@ MC_double = Parsem(parse_double, emit_double)
 def parse_string(stream):
     n = parse_short(stream)
     if n == 0:
-        return unicode("", encoding="utf-16-be")
-    return unicode(stream.read(2*n), encoding="utf-16-be")
+        return ""
+    return stream.read(2*n).decode("utf-16-be")
 
 def emit_string(s):
-    return ''.join([emit_short(len(s)), s.encode("utf-16-be")])
+    return b''.join([emit_short(len(s)), s.encode("utf-16-be")])
 
 MC_string = Parsem(parse_string, emit_string)
 
 def parse_string8(stream):
     n = parse_short(stream)
     if n == 0:
-        return ''
+        return b''
     return stream.read(n)
 
 def emit_string8(s):
-    return ''.join([emit_short(len(s)),s])
+    return b''.join([emit_short(len(s)),s])
 
 MC_string8 = Parsem(parse_string8, emit_string8)
 
@@ -171,27 +173,27 @@ MC_bool = Parsem(parse_bool, emit_bool)
 
 def parse_metadata(stream):
     data=[]
-    type = parse_unsigned_byte(stream)
-    while (type != 127):
-        type = type >> 5
-        if type == 0:
+    type_byte = parse_unsigned_byte(stream)
+    while (type_byte != 127):
+        type_val = type_byte >> 5
+        if type_val == 0:
             data.append(parse_byte(stream))
-        elif type == 1:
+        elif type_val == 1:
             data.append(parse_short(stream))
-        elif type == 2:
+        elif type_val == 2:
             data.append(parse_int(stream))
-        elif type == 3:
+        elif type_val == 3:
             data.append(parse_float(stream))
-        elif type == 4:
+        elif type_val == 4:
             data.append(parse_string(stream))
-        elif type == 5:
+        elif type_val == 5:
             data.append(parse_short(stream))
             data.append(parse_byte(stream))
             data.append(parse_short(stream))
         else:
-            logger.error(repr(stream.buf[:parse.i]))
-            raise Exception("Unknown metadata type %d" % type)
-        type = parse_byte(stream)
+            logger.error(repr(stream.buf[:stream.i]))
+            raise Exception("Unknown metadata type %d" % type_val)
+        type_byte = parse_byte(stream)
     return data
 
 def emit_metadata(md):
@@ -202,12 +204,12 @@ MC_metadata = Parsem(parse_metadata, emit_metadata)
 def parse_inventory(stream):
     n = parse_short(stream)
     inv = { "count": n }
-    inv["slots"] = [parse_slot_update(stream) for i in xrange(0,n)]
+    inv["slots"] = [parse_slot_update(stream) for i in range(0,n)]
     return inv
 
 def emit_inventory(inv):
-    slotstr = ''.join([emit_slot_update(slot) for slot in inv['slots']])
-    return ''.join([emit_short(inv['count']),slotstr])
+    slotstr = b''.join([emit_slot_update(slot) for slot in inv['slots']])
+    return b''.join([emit_short(inv['count']),slotstr])
 
 MC_inventory = Parsem(parse_inventory,emit_inventory)
 
@@ -220,7 +222,7 @@ def parse_slot_update(stream):
 def emit_slot_update(update):
     if not update:
         return emit_short(-1)
-    return ''.join([emit_short(update['item_id']), emit_byte(update['count']), emit_short(update['uses'])])
+    return b''.join([emit_short(update['item_id']), emit_byte(update['count']), emit_short(update['uses'])])
 
 MC_slot_update = Parsem(parse_slot_update, emit_slot_update)
 
@@ -264,10 +266,10 @@ def emit_slot_update2(update):
     s = emit_slot_update(update)
     if update['item_id'] in SLOT_UPDATE_2_ITEM_IDS:
         size = update['nbt_size']
-        s = ''.join(s, emit_short(size))
+        s = b''.join([s, emit_short(size)])
         if size >= 0:
             data = update['nbt_data']
-        s = ''.join([s, nbtdata])
+            s = b''.join([s, data])
     return s
 
 MC_slot_update2 = Parsem(parse_slot_update2, emit_slot_update2)
@@ -275,12 +277,12 @@ MC_slot_update2 = Parsem(parse_slot_update2, emit_slot_update2)
 def parse_inventory2(stream):
     n = parse_short(stream)
     inv = { "count": n }
-    inv["slots"] = [parse_slot_update2(stream) for i in xrange(0,n)]
+    inv["slots"] = [parse_slot_update2(stream) for i in range(0,n)]
     return inv
 
 def emit_inventory2(inv):
-    slotstr = ''.join([emit_slot_update2(slot) for slot in inv['slots']])
-    return ''.join([emit_short(inv['count']),slotstr])
+    slotstr = b''.join([emit_slot_update2(slot) for slot in inv['slots']])
+    return b''.join([emit_short(inv['count']),slotstr])
 
 MC_inventory2 = Parsem(parse_inventory2,emit_inventory2)
 
@@ -289,7 +291,7 @@ def parse_chunk(stream):
     return { 'size': n, 'data': stream.read(n) }
 
 def emit_chunk(ch):
-    return ''.join([emit_int(ch['size']), ch['data']])
+    return b''.join([emit_int(ch['size']), ch['data']])
 
 MC_chunk = Parsem(parse_chunk, emit_chunk)
 
@@ -299,31 +301,31 @@ def parse_chunk2(stream):
     return { 'size': n, 'data': stream.read(n) }
 
 def emit_chunk2(ch):
-    return ''.join([emit_int(ch['size']), emit_int(0), ch['data']])
+    return b''.join([emit_int(ch['size']), emit_int(0), ch['data']])
 
 MC_chunk2 = Parsem(parse_chunk2, emit_chunk2)
 
 def parse_multi_block_change(stream):
     n = parse_short(stream)
-    return {'coord_array': [parse_short(stream) for j in xrange(0,n)],
-            'type_array': [parse_byte(stream) for j in xrange(0,n)],
-            'metadata_array': [parse_byte(stream) for j in xrange(0,n)]}
+    return {'coord_array': [parse_short(stream) for j in range(0,n)],
+            'type_array': [parse_byte(stream) for j in range(0,n)],
+            'metadata_array': [parse_byte(stream) for j in range(0,n)]}
 
 def emit_multi_block_change(changes):
-    return ''.join([emit_short(len(changes['coord_array'])),
-                    ''.join([emit_short(x) for x in changes['coord_array']]),
-                    ''.join([emit_byte(x)  for x in changes['type_array']]),
-                    ''.join([emit_byte(x)  for x in changes['metadata_array']])])
+    return b''.join([emit_short(len(changes['coord_array'])),
+                    b''.join([emit_short(x) for x in changes['coord_array']]),
+                    b''.join([emit_byte(x)  for x in changes['type_array']]),
+                    b''.join([emit_byte(x)  for x in changes['metadata_array']])])
 
 MC_multi_block_change = Parsem(parse_multi_block_change, emit_multi_block_change)
 
 def parse_multi_block_change2(stream):
-    n = parse_int(stream)/4
+    n = parse_int(stream)//4
     return [parse_int(stream) for i in range(n)]
 
 def emit_multi_block_change2(changes):
-    return ''.join([emit_int(len(changes)*4),
-           ''.join([emit_int(c) for c in changes])])
+    return b''.join([emit_int(len(changes)*4),
+           b''.join([emit_int(c) for c in changes])])
 
 MC_multi_block_change2 = Parsem(parse_multi_block_change2, emit_multi_block_change2)
 
@@ -331,11 +333,11 @@ def parse_explosion_records(stream):
     n = parse_int(stream)
     return { 'count': n,
              'data': [(parse_byte(stream),parse_byte(stream),parse_byte(stream))
-                      for i in xrange(0,n)]}
+                      for i in range(0,n)]}
 
 def emit_explosion_records(msg):
-    return ''.join([emit_int(msg['count']),
-                    ''.join([(emit_byte(rec[0]), emit_byte(rec[1]), emit_byte(rec[2]))
+    return b''.join([emit_int(msg['count']),
+                    b''.join([(emit_byte(rec[0]), emit_byte(rec[1]), emit_byte(rec[2]))
                              for rec in msg['data']])])
 
 MC_explosion_records = Parsem(parse_explosion_records, emit_explosion_records)
@@ -351,22 +353,22 @@ def parse_vehicle_data(stream):
 
 def emit_vehicle_data(data):
     x = data['unknown1']
-    str = emit_int(x)
+    s = emit_int(x)
     if x > 0:
-        str = ''.join([str, emit_int(data['unknown2']), emit_int(data['unknown3']), emit_int(data['unknown4'])])
-    return str
+        s = b''.join([s, emit_int(data['unknown2']), emit_int(data['unknown3']), emit_int(data['unknown4'])])
+    return s
 
 MC_vehicle_data = Parsem(parse_vehicle_data, emit_vehicle_data)
 
 def parse_item_data(stream):
     n = parse_unsigned_byte(stream)
     if n == 0:
-        return ''
+        return b''
     return stream.read(n)
 
 def emit_item_data(s):
     assert len(s) < 265
-    return ''.join([emit_unsigned_byte(len(s)),s])
+    return b''.join([emit_unsigned_byte(len(s)),s])
 
 MC_item_data = Parsem(parse_item_data, emit_item_data)
 
@@ -380,11 +382,11 @@ def parse_fireball_data(stream):
     return data
 
 def emit_fireball_data(data):
-    str = emit_int(data['thrower_id'])
+    s = emit_int(data['thrower_id'])
     if data['thrower_id'] > 0:
-        str = ''.join(str, emit_short(data['u1']),
+        s = b''.join([s, emit_short(data['u1']),
                            emit_short(data['u2']),
-                           emit_short(data['u3']))
-    return str
+                           emit_short(data['u3'])])
+    return s
 
 MC_fireball_data = Parsem(parse_fireball_data, emit_fireball_data)

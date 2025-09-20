@@ -1,6 +1,6 @@
 # This source file is part of mc3p, the Minecraft Protocol Parsing Proxy.
 #
-# Copyright (C) 2011 Matthew J. McGill
+# Copyright (C) 2011 Matthew J. McGill, AmirAli Mollaei
 
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License v2 as published by
@@ -15,7 +15,9 @@
 # with this program; if not, write to the Free Software Foundation, Inc.,
 # 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 
-import os.path, logging, logging.config
+import logging
+import logging.config
+import os.path
 
 class PartialPacketException(Exception):
     """Thrown during parsing when not a complete packet is not available."""
@@ -27,14 +29,14 @@ class Stream(object):
 
     def __init__(self):
         """Initialize the stream."""
-        self.buf = ""
+        self.buf = b""
         self.i = 0
         self.tot_bytes = 0
         self.wasted_bytes = 0
 
-    def append(self,str):
+    def append(self,s):
         """Append a string to the stream."""
-        self.buf += str
+        self.buf += s
 
     def read(self,n):
         """Read n bytes, returned as a string."""
@@ -53,7 +55,7 @@ class Stream(object):
         """Mark the completion of a packet, and return its bytes as a string."""
         # Discard all data that was read for the previous packet,
         # and reset i.
-        data = ""
+        data = b""
         if self.i > 0:
             data = self.buf[:self.i]
             self.buf = self.buf[self.i:]

@@ -1,6 +1,6 @@
 # This source file is part of mc3p, the Minecraft Protocol Parsing Proxy.
 #
-# Copyright (C) 2011 Matthew J. McGill
+# Copyright (C) 2011 Matthew J. McGill, AmirAli Mollaei
 
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License v2 as published by
@@ -15,14 +15,21 @@
 # with this program; if not, write to the Free Software Foundation, Inc.,
 # 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 
-import sys, unittest, shutil, tempfile, os, os.path, logging, imp
+import importlib
+import logging
+import os
+import os.path
+import shutil
+import sys
+import tempfile
+import unittest
 
 from mc3p.plugins import PluginConfig, PluginManager, MC3Plugin, msghdlr
 
 MOCK_PLUGIN_CODE = """
 from mc3p.plugins import MC3Plugin, msghdlr
 
-print 'Initializing mockplugin.py'
+print('Initializing mockplugin.py')
 instances = []
 fail_on_init = False
 fail_on_destroy = False
@@ -84,7 +91,7 @@ def load_source(name, path):
     mod = __import__(name)
     for p in name.split('.')[1:]:
         mod = getattr(mod, p)
-    return reload(mod)
+    return importlib.reload(mod)
 
 class TestPluginManager(unittest.TestCase):
 
@@ -104,7 +111,7 @@ class TestPluginManager(unittest.TestCase):
     def _write_and_load(self, name, content):
         pfile = os.path.join(*name.split('.'))
         pfile = os.path.join(self.pdir, pfile+'.py')
-        print 'loading %s as %s' % (pfile, name)
+        print('loading %s as %s' % (pfile, name))
         with open(pfile, 'w') as f:
             f.write(content)
         mod = load_source(name, pfile)
@@ -201,8 +208,8 @@ class TestPluginManager(unittest.TestCase):
         hdlrs = getattr(a, '_MC3Plugin__hdlrs')
         for msgtype in (0x01, 0x02, 0x03, 0x04):
             self.assertTrue(msgtype in hdlrs)
-        self.assertEquals('hdlr1', hdlrs[0x01].__name__)
-        self.assertEquals('hdlr2', hdlrs[0x04].__name__)
+        self.assertEqual('hdlr1', hdlrs[0x01].__name__)
+        self.assertEqual('hdlr2', hdlrs[0x04].__name__)
 
     def testMessageHandlerFiltering(self):
         mockplugin = self._write_and_load('mockplugin', MOCK_PLUGIN_CODE)
@@ -215,12 +222,12 @@ class TestPluginManager(unittest.TestCase):
         msg = {'msgtype': 0x03, 'chat_msg': 'foo!'}
 
         self.assertTrue(self.pmgr.filter(msg, 'client'))
-        self.assertEquals(msg, p1.last_msg)
-        self.assertEquals(msg, p2.last_msg)
+        self.assertEqual(msg, p1.last_msg)
+        self.assertEqual(msg, p2.last_msg)
 
         p1.drop_next_msg = True
         self.assertFalse(self.pmgr.filter({'msgtype': 0x03, 'chat_msg': 'bar!'}, 'server'))
-        self.assertEquals(msg, p2.last_msg)
+        self.assertEqual(msg, p2.last_msg)
 
         p1.drop_next_msg = True
         self.assertTrue(self.pmgr.filter({'msgtype': 0x04, 'time': 42}, 'client'))
